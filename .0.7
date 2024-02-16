@@ -1,0 +1,206 @@
+import sys
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QFileDialog, QMessageBox, QWidget, QVBoxLayout,
+                             QTableWidget, QTableWidgetItem, QHeaderView, QAction, QTabWidget, QDialog, QTextEdit, QLineEdit, QMenu)
+from PyQt5.QtCore import Qt, QPoint
+import pandas as pd
+
+class ExcelDatabaseApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.title = 'ARTEMIS; 0.3070, 17.2.2024.'
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle(self.title)
+        self.setGeometry(100, 100, 800, 600)
+        
+        mainMenu = self.menuBar()
+        fileMenu = mainMenu.addMenu('Vispārējā izvēlne')
+      
+        openAction = QAction('Atvērt excel failu', self)
+        openAction.triggered.connect(self.load_excel_file)
+        fileMenu.addAction(openAction)
+        
+        # Creating a submenu under 'Vispārējā izvēlne'
+        submenu = fileMenu.addMenu('Citas opcijas')
+
+        newTextWindowAction = QAction('Par programmu', self)
+        newTextWindowAction.triggered.connect(self.openNewTextWindow)
+        submenu.addAction(newTextWindowAction)
+
+        newTextWindowAction2 = QAction('Kā lietot', self)
+        newTextWindowAction2.triggered.connect(self.openNewTextWindow2)
+        submenu.addAction(newTextWindowAction2)
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout()
+        self.central_widget.setLayout(self.layout)
+
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout()
+        self.central_widget.setLayout(self.layout)
+
+        self.search_bar = QLineEdit()
+        self.search_bar.setPlaceholderText("Meklēt visās darba grāmatās...")
+        self.search_bar.textChanged.connect(self.search_tables)
+        self.layout.addWidget(self.search_bar)
+
+        self.tabs = QTabWidget()
+        self.layout.addWidget(self.tabs)
+
+    def openNewTextWindow(self):
+        #QTextEdit widget
+        self.textWindow = QDialog(self)
+        self.textWindow.setWindowTitle("Par programmu")
+        self.textWindow.resize(400, 300)  
+        layout = QVBoxLayout()
+        self.textWindow.setLayout(layout)
+
+        textEdit = QTextEdit()
+        textEdit.setText("Excel failos esošo datu analīzes rīks, izstrādājis Otto Rostoks, versija 00.0307; ARTEMIS; izmantotās metodes, rīki: PYQT/PYTHON, PANDAS, HTML")  # You can set any default text or make it dynamic
+        layout.addWidget(textEdit)
+
+        self.textWindow.exec_() 
+
+    def openNewTextWindow2(self):
+        #QTextEdit widget
+        self.textWindow = QDialog(self)
+        self.textWindow.setWindowTitle("")
+        self.textWindow.resize(400, 300)  
+        layout = QVBoxLayout()
+        self.textWindow.setLayout(layout)
+
+        textEdit = QTextEdit()
+        textEdit.setText("Kā izmantot: izvēlieties izvēlni 'Atvērt excel failu' <šobrīd plānots nākotnes versijās sasaistīt ar konkrētu pakārtoto excel failu>, pēc kā ir iespējams failu pārmeklēt pēc jebkāda teksta, tā daļas, skaitļa vai cipara, iespējams iegūt apkopotus datus, kas saistīti vienā līnijā ar izvēlēto šūnu. Iespēja labot excel failu tieši no datubāzes šobrīd izstrādē. Izdotās informācijas kvalitāte ir tiešā veidā saistīta ar pakārtotajā excel failā ievadītās informācijas sistemātisku.")  # You can set any default text or make it dynamic
+        layout.addWidget(textEdit)
+
+        self.textWindow.exec_()
+
+    def load_excel_file(self):
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getOpenFileName(self, "Open Excel File", "", "Excel Files (*.xlsx);;All Files (*)", options=options)
+        if filePath:
+            try:
+                xls = pd.ExcelFile(filePath)
+                for sheet_name in xls.sheet_names:
+                    df = pd.read_excel(filePath, sheet_name=sheet_name)
+                    self.add_sheet_tab(df, sheet_name)
+            except Exception as e:
+                QMessageBox.critical(self, "Error", str(e))
+
+    def add_sheet_tab(self, df, sheet_name):
+        tab_widget = QWidget()
+        tab_layout = QVBoxLayout()
+        tab_widget.setLayout(tab_layout)
+
+        table = QTableWidget()
+        table.setColumnCount(len(df.columns))
+        table.setRowCount(len(df.index))
+        table.setHorizontalHeaderLabels(df.columns)
+        table.setSelectionBehavior(QTableWidget.SelectRows)
+        table.setContextMenuPolicy(Qt.CustomContextMenu)
+        table.customContextMenuRequested.connect(self.show_context_menu)
+
+        char_width = table.fontMetrics().width('0')
+        for col in range(table.columnCount()):
+            table.setColumnWidth(col, char_width * 10)
+
+        for i in range(len(df.index)):
+            for j in range(len(df.columns)):
+                content = str(df.iloc[i, j])
+                item = QTableWidgetItem(content)
+                table.setItem(i, j, item)
+                if len(content) > 10:
+                    item.setToolTip(content)
+
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        tab_layout.addWidget(table)
+        self.tabs.addTab(tab_widget, sheet_name)
+
+    def search_tables(self):
+        search_text = self.search_bar.text().lower()
+        found_in_sheet = False
+
+        for i in range(self.tabs.count()):
+            tab_widget = self.tabs.widget(i)
+            table = tab_widget.layout().itemAt(0).widget()
+            sheet_has_match = False
+
+            for row in range(table.rowCount()):
+                row_visible = False
+                for col in range(table.columnCount()):
+                    item = table.item(row, col)
+                    if item and search_text in item.text().lower():
+                        row_visible = True
+                        sheet_has_match = True
+                        break
+                table.setRowHidden(row, not row_visible)
+
+            if sheet_has_match and not found_in_sheet:
+                self.tabs.setCurrentIndex(i)  # Switch to the tab where a match is found
+                found_in_sheet = True
+
+        # If no match is found in the sheet, make sure all rows are visible for the next search
+            if not sheet_has_match:
+                for row in range(table.rowCount()):
+                    table.setRowHidden(row, False)
+
+
+    def show_context_menu(self, position):
+        table = self.sender()
+        context_menu = QMenu(self)
+
+        show_details_action = context_menu.addAction("Skatīt kopsavilkumu")
+        action = context_menu.exec_(table.viewport().mapToGlobal(position))
+
+        if action == show_details_action:
+            index = table.indexAt(position)
+            if index.isValid():
+                self.show_cell_details(index.row(), index.column(), table)
+
+    def show_cell_details(self, row, column, table):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Informācija par kriminālprocesu")
+        dialog.resize(600, 400) #izmērs detalizētajam pop-up logam
+        dialog_layout = QVBoxLayout()
+        dialog.setLayout(dialog_layout)
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+
+        details = "<table border='0.5' cellpadding='0'>"
+        for col in range(table.columnCount()):
+            header = table.horizontalHeaderItem(col).text()
+            cell_value = table.item(row, col).text() if table.item(row, col) is not None else ""
+            details += f"<tr><td><b>{header}</b></td><td>{cell_value}</td></tr>"
+        details += "</table>"
+        text_edit.setHtml(details)
+        dialog_layout.addWidget(text_edit)
+
+        dialog.exec_()
+
+def main():
+    app = QApplication(sys.argv)
+    from PyQt5.QtGui import QFont
+    app.setFont(QFont("Cambria"))
+    app.setStyleSheet("""
+        QWidget {
+            background-color: gray;
+            color: black;
+        }
+        QTabWidget::pane {
+            background-color: gray;
+        }
+        QTabBar {
+            background-color: gray;
+            color: black;
+        }
+    """)
+    ex = ExcelDatabaseApp()
+    ex.show()
+    sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    main()
